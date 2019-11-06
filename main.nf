@@ -33,11 +33,13 @@
  * defaults parameter definitions
  */
 
+dataFolder ="RV11" //RV11  RV12  RV20  RV30  RV40  RV50
+
 // input sequences to align in fasta format
-params.tfa = "$baseDir/data/RV11/*.tfa"
+params.tfa = "$baseDir/data/${dataFolder}/BB11001.tfa"
 
 // input reference sequences aligned in 
-params.refs = "$baseDir/data/RV11/*.msf"
+params.refs = "$baseDir/data/${dataFolder}/*.msf"
 
 // input guide trees in Newick format. Or `false` to generate trees
 //params.trees = "$baseDir/data/trees/*.CLUSTALO.dnd"
@@ -65,7 +67,7 @@ params.evaluate = true
 params.buckets= '10,50,100,500,1000'
 
 // output directory
-params.output = "$baseDir/results"
+params.output = "$baseDir/results/${dataFolder}"
 
 params.reformat = true
 
@@ -125,7 +127,7 @@ align_methods = params.align_method
 
 process reformatBaliBase {
     tag "${id} - ${seqs}"
-    publishDir "${params.output}/data", mode: 'copy', overwrite: true
+    publishDir "${params.output}/fasta", mode: 'copy', overwrite: true
 
     input:
       set val(id), \
