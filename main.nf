@@ -96,7 +96,6 @@ if ( params.tfa ) {
   Channel
   .fromPath(params.tfa)
   .map { item -> [ item.baseName, item] }
-  .view()
   .set { tfaSeqs }
 }
 
@@ -105,7 +104,6 @@ if( params.refs ) {
   Channel
     .fromPath(params.refs)
     .map { item -> [ item.baseName, item] }
-    .view()
     .set { refs }
 }
 
@@ -114,13 +112,11 @@ if ( params.trees ) {
   Channel
     .fromPath(params.trees)
     .map { item -> [ item.baseName.tokenize('.')[0], item.baseName.tokenize('.')[1], item] }
-    .view()
     .set { trees }
 }
 else { 
   Channel
     .empty()
-    .view()
     .set { trees }
 }
 
@@ -179,7 +175,44 @@ process guide_trees {
 treesGenerated
   .mix ( trees )
   .combine ( reformatSeqs2, by:0 )
-  .set { seqsAndTreesForRegressiveAlignment }
+  .into { seqsAndTreesForStandardAlignment; seqsAndTreesForRegressiveAlignment }
+
+process standard_alignment {
+  
+    tag "${id}.${align_method}.STD.NA.${tree_method}"
+    publishDir "${params.output}/alignments", mode: 'copy', overwrite: true
+    
+    input:
+      set val(id), \
+        val(tree_method), \
+        file(guide_tree), \
+        file(seqs) \
+        from seqsAndTreesForStandardAlignment
+
+      each align_method from align_methods.tokenize(',') 
+
+    when:
+      params.standard_align
+
+    output:
+      set val(id), \
+      val("${align_method}"), \
+      val(tree_method), val("std_align"), \
+      val("NA"), \
+      file("*.aln"), \
+      file ("*.msf") \
+      into standard_alignments
+
+     script:
+     """
+     clustalo --infile=${seqs} \
+        --guidetree-in=${guide_tree} \
+        --outfmt=fa \
+        -o ${id}.std.${align_method}.with.${tree_method}.tree.aln
+      
+      t_coffee -other_pg seq_reformat -in ${id}.std.${align_method}.with.${tree_method}.tree.aln -output=msf_aln -out=${id}.std.${align_method}.with.${tree_method}.tree.aln.msf
+     """
+}
 
 process regressive_alignment {
 
@@ -222,10 +255,13 @@ process regressive_alignment {
     """
 }
 
+standard_alignments
+  .mix ( regressive_alignments )
+  .set { all_alignments }
+
 refs
-  .cross (regressive_alignments)
+  .cross (all_alignments)
   .map { it -> [it[0][0], it[1][1], it[1][2], it[1][4], it[1][6], it[0][1]] }
-  .view()
   .set { toEvaluate }
 
 process eval{
@@ -246,7 +282,8 @@ process eval{
           val(tree_method), \
           val(align_method), \
           val(bucket_size), \
-          file("*.out") \
+          file("*.sp"), \
+          file("*.tc") \
           into scores
 
     when:
@@ -254,7 +291,8 @@ process eval{
 
     script:
     """
-    ${baseDir}/bin/bali_score ${ref_alignment} ${test_alignment} -v > ${id}.dpa_${bucket_size}.${align_method}.with.${tree_method}.score.out
+    ${baseDir}/bin/bali_score ${ref_alignment} ${test_alignment} -v > score.out
+    awk -F " " 'END{print \$3 > "${id}.dpa_${bucket_size}.${align_method}.with.${tree_method}.sp"; print \$4 > "${id}.dpa_${bucket_size}.${align_method}.with.${tree_method}.tc" }' score.out 
     """
 
 }

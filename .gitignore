@@ -1,0 +1,6 @@
+*.nfs*
+work/
+results/
+.nextflow*
+report*
+trace*
